@@ -23,7 +23,7 @@ pub trait Edge {
 
 pub trait Vertex {
 
-    fn get_value(&self, key: &String) -> dyn Type;
+    fn get_value(&self, key: &String) -> &dyn Type;
 
     fn set_value(&self, key: &String, value: &dyn Type) -> Option<dyn Type>;
 

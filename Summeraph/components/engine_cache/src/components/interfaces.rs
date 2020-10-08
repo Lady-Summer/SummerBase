@@ -33,7 +33,12 @@ pub trait Components {
         let mut result = prefix << 32;
         result + SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     }
-    fn set_metadata(&mut self, id: u64, name: String, properties: HashMap<String, String>) {
+    fn set_metadata(
+        &mut self,
+        id: u64,
+        name: String,
+        properties: HashMap<String, String>
+    ) {
         self.set_id(id);
         self.set_name(name);
         properties.keys().for_each(|key| {

@@ -76,7 +76,11 @@ impl DefaultStorageService {
         }
     }
 
-    fn connect(endpoint: &dyn ToSocketAddrs, timeout: &u64, buf_size: &usize) -> TcpStream {
+    fn connect(
+        endpoint: &dyn ToSocketAddrs,
+        timeout: &u64,
+        buf_size: &usize
+    ) -> TcpStream {
 
         let client = TcpStream::connect(endpoint);
         match client {
