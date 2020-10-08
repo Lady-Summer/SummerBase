@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{Formatter, Debug};
+use std::io::Result;
 
 pub enum QueryEventKind {
     Read,

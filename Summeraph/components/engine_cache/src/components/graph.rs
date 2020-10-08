@@ -5,15 +5,15 @@ use crate::components::vertex::{Vertex, VertexPool};
 use actix::prelude::*;
 
 pub trait Graph<E, V> {
-    fn add_vertex(&mut self, v: &Vertex<V>);
+    fn add_vertex(&mut self, v: &Vertex);
 }
 
 #[derive(Graph, Components)]
 pub struct DefaultGraph<'a, E, V> {
     partition_id: u32,
     properties: HashMap<String, String>,
-    vertex_pool: VertexPool<'a, V>,
-    edge_pool: EdgePool<'a, E>,
+    vertex_pool: VertexPool,
+    edge_pool: EdgePool<'a>,
 }
 
 impl <'a, E, V> Actor for DefaultGraph<'a, E, V> {

@@ -1,40 +1,33 @@
 use std::collections::{HashSet, HashMap};
-use crate::interfaces::*;
 use std::error::Error;
 use crate::error::ShardIndexOutOfBound;
-use std::borrow::Borrow;
-use crate::storage::{Storage, AdjacentShard};
+use std::borrow::{Borrow, BorrowMut};
 use std::ops::Deref;
+use super::super::graph as graph;
+use graph::core::*;
+use graph::storage::Storage;
 
-type InEdge = dyn Edge;
-type DestVertex = dyn Vertex;
-
-#[derive(Clone, PartialOrd, PartialEq)]
-pub struct Shard<S: Storage> {
-
-    pub id: usize,
-
-    pub edges: HashMap<usize, Vec<InEdge>>
-}
-
-impl <S: Storage> Shard<S> {
-
-    pub fn update_fully(&mut self) {
-    }
-
-    pub fn update_last_window_to_disk(&mut self) {
-    }
-}
-
+type InEdge<'a> = Edge<'a, f64>;
+type DestVertex = Vertex;
+type IntervalId = usize;
 
 #[derive(Clone, PartialOrd, PartialEq)]
-pub struct Interval<S: Storage> {
+pub struct Shard<'a, S: Storage> {
 
-    pub shards: Vec<Shard<S>>,
+    pub id: &'a usize,
+
+    /// dest -> inEdges
+    pub edges: HashMap<VertexId, Vec<InEdge<'a>>>
+}
+
+#[derive(Clone, PartialOrd, PartialEq)]
+pub struct Interval<'a, S: Storage> {
+
+    pub shards: Vec<Shard<'a, S>>,
 
     pub vertices: Vec<DestVertex>,
 
-    pub id: usize,
+    pub id: &'a IntervalId,
 
     shard_size: usize,
 
@@ -48,25 +41,34 @@ impl <S: Storage> Interval<S> {
         Interval {
             shards: Vec::with_capacity(shards_num.to_usize()),
             vertices: vec![],
-            id: 0,
+            id: 0.borrow(),
             shard_size: shards_num.to_usize(),
             s
         }
     }
 
-    pub fn load_interval_from_disk(interval_id: &usize, s: S) -> Interval<S> {
+    pub fn load_interval_from_disk(interval_id: &IntervalId, s: S) -> Interval<S> {
         match s.get_interval(interval_id) {
             Ok(interval) => {
-                let edge_data_shard = interval.1;
+                let mut edge_data_shard = interval.1;
                 let mut shards = vec![];
                 let ref mut vertices: Vec<DestVertex> = vec![];
-                interval.0.iter().for_each(move |adj_shard|
-                    shards.push(Self::load_shards(interval_id, vertices, adj_shard))
+                interval.0.iter().for_each(
+                    move |adj_shard|
+                        shards.push(
+                            Self::transform_shards(
+                                interval_id, vertices,
+                                adj_shard,
+                                edge_data_shard.borrow_mut()
+                            )
+                        )
                 );
+                /// Sort vertices in order with id
+                vertices.sort_by_key(|x| x.get_id());
                 Interval {
                     shards,
-                    vertices: vertices.deref().to_vec(),
-                    id: interval_id.clone(),
+                    vertices: vertices.to_vec(),
+                    id: interval_id,
                     shard_size: 0,
                     s
                 }
@@ -76,48 +78,62 @@ impl <S: Storage> Interval<S> {
 
     }
 
-    fn load_shards(interval_id: &usize, vertices: &mut Vec<dyn Vertex>, adj_shard: &AdjacentShard)
-        -> Shard<S>
-    {
-        let mut edges: HashMap<usize, Vec<InEdge>> = HashMap::new();
-        vertices.push(adj_shard.0.borrow());
-        edges.insert(interval_id.clone(),
-                     adj_shard.1.iter().map(move |x| {
-
-                     }).collect());
+    fn transform_shards(
+        interval_id: &IntervalId,
+        vertices: &mut Vec<Vertex>,
+        adj_shard: &AdjacentShard,
+        edge_shard: &mut EdgeDataShard
+    ) -> Shard<S> {
+        vertices.push(adj_shard.0.clone());
         Shard {
-            id: interval_id.clone(),
-            edges
+            id: interval_id,
+            edges: Self::get_shard_vertices_inedges(adj_shard, edge_shard)
         }
     }
 
-    pub fn load_subgraph(&self) -> Self {
-    }
-
-    fn parallel_udf_executor<F, U: Vertex, T>(&self, f: F) -> Vec<_>
-    where F: Fn(U) -> T
-
-    {
-        self.vertices.iter().map(|v| async {Ok(f(v))?}).collect()
-    }
-
-    fn update_shard(&mut self) {
-        match self.shards.get(self.id) {
-            Some(shard) => {
-                shard.borrow().update_fully();
-                for x in 0..self.shard_size {
-                    if x != self.id {
-                        self.shards.get(x).unwrap().update_last_window_to_disk();
+    fn get_shard_vertices_inedges(
+        adj_shard: &AdjacentShard,
+        edge_shard: &mut EdgeDataShard
+    ) -> HashMap<u64, Vec<Edge<f64>>> {
+        let mut edges: HashMap<VertexId, Vec<InEdge>> = HashMap::new();
+        edges.insert(
+            adj_shard.2.get_id().clone(),
+            adj_shard.1.iter().map(
+                move |x| {
+                    /// Insert
+                    match edge_shard.find_and_sort_by_edge_id(x) {
+                        Some(edge) => edge.clone(),
+                        None => panic!("Invalid edge with id {} in shard {} of interval {}", x, )
                     }
-                }
-            }
-            None => Err(ShardIndexOutOfBound {})
-        }
+                }).collect()
+        );
+        edges
     }
+    //
+    // fn parallel_udf_executor<F, U, T>(&self, f: F) -> Vec<_>
+    // where F: Fn(U) -> T
+    //
+    // {
+    //     self.vertices.iter().map(|v| async {Ok(f(v))?}).collect()
+    // }
+    //
+    // fn update_shard(&mut self) {
+    //     match self.shards.get(self.id) {
+    //         Some(shard) => {
+    //             shard.borrow().update_fully();
+    //             for x in 0..self.shard_size {
+    //                 if x != self.id {
+    //                     self.shards.get(x).unwrap().update_last_window_to_disk();
+    //                 }
+    //             }
+    //         }
+    //         None => Err(ShardIndexOutOfBound {})
+    //     }
+    // }
 
 }
 
-impl PartialEq for Interval<S> where S: Storage {
+impl <'a> PartialEq for Interval<'a, S> where S: Storage {
     fn eq(&self, other: &Self) -> bool {
         (self.shards == other.shards.borrow()) &&
             (self.vertices == other.vertices.borrow()) &&

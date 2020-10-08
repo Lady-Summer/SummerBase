@@ -7,7 +7,7 @@ SummerBase is a new kind of Graph Analytic Platform, combined with OLTP and OLAP
 2. PowerGraph: Distributed Graph-Parallel Computation on Natural Graphs;
 3. GraphChi:  Large-Scale Graph Computation on Just a PC;
 
-**Our objective is to integrate Graph Computation and Graph Storage in one system**. We design in **share-nothing distributed framework**. However, GraphChi is initially designed as a single-machine system but it is scalable. So we decide to distribute it. 
+**Our objective is to integrate Graph Computation and Graph Storage in one system**. We design in **share-nothing distributed framework**. However, GraphChi is initially designed as a single-machine system but it is scalable. So we decide to extend it. 
 
 ### Design
 
@@ -67,8 +67,9 @@ I think It should be handled by a system like Job Scheduler. Importantly, user-i
 
 #### SummerChi
 
-- [ ] GraphChi reimplementation in Rust
-- [ ] Compress Module
+- [x] GraphChi Components reimplementation in Rust
+- [ ] GraphChi Persist Storage Engine reimplement in Rust
+- [ ] Parallel Slide Windows
 - [ ] GraphChi's Programming Model
 - [ ] Native graph storage with RocksDB backend
 - [ ] Unified Client RPC API and data structure
