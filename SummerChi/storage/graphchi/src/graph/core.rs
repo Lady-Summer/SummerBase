@@ -1,5 +1,3 @@
-use crate::types::number::Type;
-use crate::Schema;
 use std::borrow::Borrow;
 
 pub type EdgeId = u64;
@@ -29,18 +27,33 @@ pub struct Edge<'a, T:?Sized> {
     weight: T
 }
 
+impl <'a, T:?Sized> Edge<'a, T> {
+    pub fn new(id: &EdgeId, src: &VertexId, dest: &VertexId, weight: &T) -> &'a Edge<'a, T> {
+        &Edge {
+            id,
+            src: src.clone(),
+            dest: dest.clone(),
+            weight: weight.clone()
+        }
+    }
+
+    pub fn get_id(&self) -> &u64 {
+        self.id
+    }
+}
+
 /// src -> edge -> dest
 /// multi-relation
-pub struct AdjacentShard(pub Vertex, pub Vec<EdgeId>, pub Vertex);
+pub struct AdjacentShard<'a>(pub Vertex, pub Vec<&'a EdgeId>, pub Vertex);
 
-pub struct EdgeDataShard<'a>(pub Vec<Edge<'a, f64>>);
+#[derive(PartialEq)]
+pub struct EdgeDataShard<'a>(pub Vec<&'a Edge<'a, f64>>);
 
 impl <'a> EdgeDataShard<'a> {
-    pub fn find_and_sort_by_edge_id(
+    pub fn find_by_edge_id(
         &mut self,
         edge_id: &u64
     ) -> Option<&Edge<'a, f64>> {
-        self.0.sort_by_key(|x| x.id);
         match self.0
             .binary_search_by_key(
                 edge_id,
@@ -50,11 +63,13 @@ impl <'a> EdgeDataShard<'a> {
             Err(e) => None
         }
     }
+
+    pub fn sort_by_edge_id(&mut self) {
+        self.0.sort_by_key(|x| x.id)
+    }
 }
 
 mod engine_core {
-    use crate::graph::core::Vertex;
-    use std::io::Result;
 
     pub struct GraphEngine {
         intervals: Vec<usize>,
