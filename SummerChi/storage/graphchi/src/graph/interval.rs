@@ -1,11 +1,8 @@
-use std::collections::{HashSet, HashMap};
-use std::error::Error;
-use crate::error::ShardIndexOutOfBound;
+use std::collections::HashMap;
 use std::borrow::{Borrow, BorrowMut};
-use std::ops::Deref;
-use super::super::graph as graph;
-use graph::core::*;
-use graph::storage::Storage;
+use crate::graph as Graph;
+use Graph::core::*;
+use Graph::storage::Storage;
 
 type InEdge<'a> = Edge<'a, f64>;
 type DestVertex = Vertex;
@@ -34,10 +31,10 @@ pub struct Interval<'a, S: Storage> {
     s: S
 }
 
-impl <S: Storage> Interval<S> {
+impl <'a, S: Storage> Interval<'a, S> {
 
     pub fn new(shards_num: &u64, s: S)
-               -> Interval<S> {
+               -> Interval<'a, S> {
         Interval {
             shards: Vec::with_capacity(shards_num.to_usize()),
             vertices: vec![],
@@ -47,7 +44,7 @@ impl <S: Storage> Interval<S> {
         }
     }
 
-    pub fn load_interval_from_disk(interval_id: &IntervalId, s: S) -> Interval<S> {
+    pub fn load_interval_from_disk(interval_id: &IntervalId, s: S) -> Interval<'a, S> {
         match s.get_interval(interval_id) {
             Ok(interval) => {
                 let mut edge_data_shard = interval.1;
@@ -82,8 +79,8 @@ impl <S: Storage> Interval<S> {
         interval_id: &IntervalId,
         vertices: &mut Vec<Vertex>,
         adj_shard: &AdjacentShard,
-        edge_shard: &mut EdgeDataShard
-    ) -> Shard<S> {
+        edge_shard: &mut EdgeDataShard<'a>
+    ) -> Shard<'a,  S> {
         vertices.push(adj_shard.0.clone());
         Shard {
             id: interval_id,
@@ -93,17 +90,18 @@ impl <S: Storage> Interval<S> {
 
     fn get_shard_vertices_inedges(
         adj_shard: &AdjacentShard,
-        edge_shard: &mut EdgeDataShard
-    ) -> HashMap<u64, Vec<Edge<f64>>> {
-        let mut edges: HashMap<VertexId, Vec<InEdge>> = HashMap::new();
+        edge_shard: &mut EdgeDataShard<'a>
+    ) -> HashMap<u64, Vec<InEdge<'a>>> {
+        let mut edges: HashMap<VertexId, Vec<InEdge<'a>>> = HashMap::new();
+        edge_shard.sort_by_edge_id();
         edges.insert(
             adj_shard.2.get_id().clone(),
             adj_shard.1.iter().map(
                 move |x| {
                     /// Insert
-                    match edge_shard.find_and_sort_by_edge_id(x) {
+                    match edge_shard.find_by_edge_id(x) {
                         Some(edge) => edge.clone(),
-                        None => panic!("Invalid edge with id {} in shard {} of interval {}", x, )
+                        None => panic!("Invalid edge with id {}", x)
                     }
                 }).collect()
         );
@@ -132,11 +130,11 @@ impl <S: Storage> Interval<S> {
     // }
 
 }
-
-impl <'a> PartialEq for Interval<'a, S> where S: Storage {
-    fn eq(&self, other: &Self) -> bool {
-        (self.shards == other.shards.borrow()) &&
-            (self.vertices == other.vertices.borrow()) &&
-            (self.id == other.id)
-    }
-}
+//
+// impl <'a, S> PartialEq for Interval<'a, S> where S: Storage {
+//     fn eq(&self, other: &Self) -> bool {
+//         (self.shards == other.shards.borrow()) &&
+//             (self.vertices == other.vertices.borrow()) &&
+//             (self.id == other.id)
+//     }
+// }

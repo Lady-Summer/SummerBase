@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use crate::storage::Storage;
 use crate::types::number::Type;
 
 pub trait Edge {

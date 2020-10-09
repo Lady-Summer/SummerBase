@@ -24,15 +24,11 @@ pub trait Storage {
 }
 
 mod io {
-    use tokio::stream::StreamExt;
-    use std::io::{Read, Seek, Write, Result};
-    use std::error::Error;
-    use std::fs::{File, OpenOptions, Metadata};
-    use std::borrow::{Borrow, BorrowMut};
+    use std::io::{Read, Write, Result};
+    use std::borrow::Borrow;
     use std::path::Path;
-    use std::iter::Map;
-    use super::super as graph;
-    use graph::core::*;
+    use crate::graph as Graph;
+    use Graph::core::*;
 
     pub type Stream = Vec<u8>;
 
@@ -169,32 +165,31 @@ mod io {
 
 #[derive(PartialOrd, PartialEq)]
 struct Unit<'a>(ShardId, IntervalId, Edge<'a, f64>);
-
-impl PartialEq for Unit {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1 && self.2 == other.2
-    }
-}
-
-impl PartialOrd for Unit {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        unimplemented!()
-    }
-}
+//
+// impl <'a> PartialEq for Unit<'a> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.0 == other.0 && self.1 == other.1 && self.2 == other.2
+//     }
+// }
+//
+// impl <'a> PartialOrd for Unit<'a> {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         unimplemented!()
+//     }
+// }
 
 struct EdgeBuffer<'a>  {
     buffer: BinaryHeap<Unit<'a>>
 }
 
 pub mod storage_core {
-    use std::error::Error;
-    use std::io::{Result, Read, Seek};
+    use std::io::Result;
     use std::path::Path;
     use std::borrow::Borrow;
-    use std::collections::{BinaryHeap, HashSet};
-    use super::super as graph;
-    use graph::core::*;
-    use graph::storage::EdgeBuffer;
+    use std::collections::BinaryHeap;
+    use crate::graph as Graph;
+    use Graph::core::*;
+    use Graph::storage::EdgeBuffer;
     use super::io::*;
     use tokio::fs::File;
     use crate::error::IntervalLoadError;
@@ -204,7 +199,7 @@ pub mod storage_core {
         use crate::graph::storage::io::*;
 
         pub trait Codec<R: InputStream, W: OutputStream, U> {
-            fn encode(data: Vec<U>, level: i32) -> Result<&[Stream]>;
+            fn encode(data: Vec<U>, level: i32) -> Result<&'static [Stream]>;
 
             fn decode(steam: Stream) -> Result<U>;
         }
@@ -265,13 +260,13 @@ pub mod storage_core {
         interval_metadata_buf: Vec<Metadata>
     }
 
-    impl super::Storage for GraphChiStorage {
+    impl <'a> super::Storage for GraphChiStorage<'a> {
 
         fn get_interval(
             &self,
             interval_id: &usize
-        ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
-            let path = Path::new(&(graph::constants::ROOT_PATH + "/interval_" + stringify!(interval_id)));
+        ) -> Result<(Vec<AdjacentShard>, EdgeDataShard<'a>)> {
+            let path = Path::new(&(Graph::constants::ROOT_PATH + "/interval_" + stringify!(interval_id)));
             let ref mut in_stream = GraphChiInputStream::open(path);
             let ref mut adj_shard = vec![];
             let ref mut edge_arr = vec![];
@@ -287,7 +282,7 @@ pub mod storage_core {
                     Ok(
                         (
                             adj_shard.into_vec(),
-                            EdgeDataShard { 0: edge_arr.into_vec() }
+                            EdgeDataShard { 0: edge_arr.iter().map(|x| x).collect() }
                         )
                     )
                 },
@@ -323,7 +318,7 @@ pub mod storage_core {
         fn update_interval(
             &self,
             adj_shard: AdjacentShard,
-            edge_shard: EdgeDataShard
+            edge_shard: EdgeDataShard<'a>
         ) -> Result<()> {
             // TODO
             unimplemented!()

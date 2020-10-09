@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/SummerChi/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/SummerChi/storage/graphchi/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Summeraph/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/SummerChi/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/SummerChi/storage/graphchi/target" />
       <excludeFolder url="file://$MODULE_DIR$/SummerChi/target" />
       <excludeFolder url="file://$MODULE_DIR$/Summeraph/target" />
@@ -14,5 +15,9 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+  <component name="sonarModuleSettings">
+    <option name="localAnalysisScripName" value="&lt;PROJECT&gt;" />
+    <option name="serverName" value="&lt;PROJECT&gt;" />
   </component>
 </module>
