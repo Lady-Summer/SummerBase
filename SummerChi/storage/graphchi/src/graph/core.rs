@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::iter::FromIterator;
 
 pub type EdgeId = u64;
 pub type VertexId = u64;
@@ -8,56 +9,57 @@ pub type ShardId = usize;
 
 #[derive(Clone, PartialOrd, PartialEq)]
 pub struct Vertex {
-    id: u64,
+    pub id: u64,
     in_edges: Vec<EdgeId>,
     out_edges: Vec<EdgeId>
 }
 
-impl Vertex {
-    pub fn get_id(&self) -> &u64 {
-        self.id.borrow()
-    }
-}
-
-#[derive(PartialOrd, PartialEq)]
-pub struct Edge<'a, T:?Sized> {
-    id: &'a EdgeId,
+#[derive(Clone, PartialOrd, PartialEq)]
+pub struct Edge<T> {
+    id: EdgeId,
     src: VertexId,
     dest: VertexId,
     weight: T
 }
 
-impl <'a, T:?Sized> Edge<'a, T> {
-    pub fn new(id: &EdgeId, src: &VertexId, dest: &VertexId, weight: &T) -> &'a Edge<'a, T> {
-        &Edge {
+impl <T> Edge<T> {
+    pub fn new(id: EdgeId, src: VertexId, dest: VertexId, weight: T) -> Edge<T> {
+        Edge {
             id,
-            src: src.clone(),
-            dest: dest.clone(),
-            weight: weight.clone()
+            src,
+            dest,
+            weight
         }
     }
 
     pub fn get_id(&self) -> &u64 {
-        self.id
+        self.id.borrow()
+    }
+}
+
+impl <T: 'static> FromIterator<&'static Edge<T>> for Vec<Edge<T>> {
+    fn from_iter<U: IntoIterator<Item=&'static Edge<T>>>(iter: U) -> Self {
+        unimplemented!()
     }
 }
 
 /// src -> edge -> dest
 /// multi-relation
-pub struct AdjacentShard<'a>(pub Vertex, pub Vec<&'a EdgeId>, pub Vertex);
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct AdjacentShard(pub Vertex, pub Vec<EdgeId>, pub Vertex);
 
 #[derive(PartialEq)]
-pub struct EdgeDataShard<'a>(pub Vec<&'a Edge<'a, f64>>);
+pub struct EdgeDataShard(pub Vec<Edge<f64>>);
 
-impl <'a> EdgeDataShard<'a> {
+impl EdgeDataShard {
     pub fn find_by_edge_id(
         &mut self,
         edge_id: &u64
-    ) -> Option<&Edge<'a, f64>> {
+    ) -> Option<&Edge<f64>> {
         match self.0
             .binary_search_by_key(
                 edge_id,
-                |x| x.id.clone()
+                |x| x.id
             ) {
             Ok(index) => self.0.get(index),
             Err(e) => None

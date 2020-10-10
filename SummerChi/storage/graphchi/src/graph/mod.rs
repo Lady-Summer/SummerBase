@@ -7,6 +7,7 @@ mod constants {
     pub const ENTER: u8 = '\n' as u8;
 }
 
+#[macro_export]
 pub macro_rules! edge_shard {
     () => {
         $graphchi::graph::core::EdgeDataShard($crate::vec::Vec::new())

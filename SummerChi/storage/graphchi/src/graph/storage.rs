@@ -18,8 +18,8 @@ pub trait Storage {
     /// Flush all updated interval data into disk
     fn update_interval(
         &self,
-        adj_shard: AdjacentShard,
-        edge_shard: EdgeDataShard
+        adj_shard: &AdjacentShard,
+        edge_shard: &EdgeDataShard
     ) -> Result<()>;
 }
 
@@ -33,7 +33,7 @@ mod io {
     pub type Stream = Vec<u8>;
 
     /// A common type for file output stream.
-    pub trait InputStream: Read {
+    pub trait InputStream: Read + Iterator {
 
         /// Read a line of a file input stream and pc which indicates the offset of the line end.
         /// While read success, return an Option with Stream type data. If catch EOF, return None type.
@@ -57,7 +57,10 @@ mod io {
         /// Open a file stream in path
         /// # Error
         ///
-        fn open<P: AsRef<Path>>(path: P) -> Result<dyn InputStream>;
+        fn open<P: AsRef<Path>>(
+            path: P
+        ) -> Result<dyn InputStream<Item = Stream>>
+            where Self: Sized;
 
         /// Return true:  pc in the end of the stream.
         /// Return false: pc is not in the end
@@ -68,17 +71,12 @@ mod io {
         // The number of the line
         fn len(&self) -> u64;
 
-    }
-
-    impl Iterator for dyn InputStream {
-        type Item = Stream;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            match self.readline() {
-                Ok(line) => line,
-                Err(e) => None
-            }
-        }
+        // fn next(&mut self) -> Option<Self::Item> {
+        //     match self.readline() {
+        //         Ok(line) => line,
+        //         Err(e) => None
+        //     }
+        // }
     }
 
 
@@ -88,9 +86,9 @@ mod io {
 
         fn decode_all_lines<U, F>(
             &self,
-            input_stream: &mut dyn InputStream,
+            input_stream: &mut dyn InputStream<Item = Stream>,
             decoder: F
-        ) -> &Vec<U> where F: Fn(&Stream) -> U {
+        ) -> Vec<U> where F: Fn(&Stream) -> U, U: Clone {
             let ref mut result = vec![];
             while !input_stream.is_end() {
                 match input_stream.readline() {
@@ -101,14 +99,15 @@ mod io {
                     Err(e) => panic!(e)
                 }
             }
-            result
+            result.to_vec()
         }
 
         fn decode_lines_range<U, F>(
             &self,
-            input_stream: &mut dyn InputStream,
+            input_stream: &mut dyn InputStream<Item = Stream>,
             decoder: F) -> &Vec<U>
             where F: Fn(&Stream) -> U {
+            unimplemented!()
         }
 
         fn decode_stream<U, F>(
@@ -149,22 +148,12 @@ mod io {
         /// only add new data.
         /// # Error
         /// If file fails to be opened/created, return
-        fn open<P: AsRef<Path>>(&mut self, path: &P) -> Result<()>;
-    }
-
-    impl Write for dyn OutputStream {
-        fn write(&mut self, buf: &[u8]) -> Result<usize> {
-            unimplemented!()
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            unimplemented!()
-        }
+        fn open<P: AsRef<Path>>(&mut self, path: P) -> Result<()>;
     }
 }
 
 #[derive(PartialOrd, PartialEq)]
-struct Unit<'a>(ShardId, IntervalId, Edge<'a, f64>);
+struct Unit(ShardId, IntervalId, Edge<f64>);
 //
 // impl <'a> PartialEq for Unit<'a> {
 //     fn eq(&self, other: &Self) -> bool {
@@ -178,12 +167,12 @@ struct Unit<'a>(ShardId, IntervalId, Edge<'a, f64>);
 //     }
 // }
 
-struct EdgeBuffer<'a>  {
-    buffer: BinaryHeap<Unit<'a>>
+struct EdgeBuffer {
+    buffer: BinaryHeap<Unit>
 }
 
 pub mod storage_core {
-    use std::io::Result;
+    use std::io::{Result, Read};
     use std::path::Path;
     use std::borrow::Borrow;
     use std::collections::BinaryHeap;
@@ -193,6 +182,8 @@ pub mod storage_core {
     use super::io::*;
     use tokio::fs::File;
     use crate::error::IntervalLoadError;
+    use crate::graph::storage::Unit;
+    use std::error::Error;
 
     mod codec {
         use std::io::Result;
@@ -214,12 +205,18 @@ pub mod storage_core {
         shard_num: u64
     }
 
-    struct GraphChiInputStream<'a> {
-        file: &'a File,
+    struct GraphChiInputStream {
+        file: File,
         pc: u64
     }
 
-    impl <'a> InputStream for GraphChiInputStream<'a> {
+    impl Read for GraphChiInputStream {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+            unimplemented!()
+        }
+    }
+
+    impl InputStream for GraphChiInputStream {
         fn readline(&mut self) -> Result<Option<Stream>> {
             unimplemented!()
         }
@@ -236,7 +233,9 @@ pub mod storage_core {
             unimplemented!()
         }
 
-        fn open<P: AsRef<Path>>(path: P) -> Result<dyn InputStream> {
+        fn open<P: AsRef<Path>> (
+            path: P
+        ) -> Result<dyn InputStream<Item = Stream>> {
             unimplemented!()
         }
 
@@ -253,19 +252,27 @@ pub mod storage_core {
         }
     }
 
-    pub struct GraphChiStorage<'a> {
-        edge_buffer: super::EdgeBuffer<'a>,
+    impl Iterator for GraphChiInputStream {
+        type Item = Stream;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            unimplemented!()
+        }
+    }
+
+    pub struct GraphChiStorage {
+        edge_buffer: super::EdgeBuffer,
         root_dir: String,
         prefix_interval: String,
         interval_metadata_buf: Vec<Metadata>
     }
 
-    impl <'a> super::Storage for GraphChiStorage<'a> {
+    impl super::Storage for GraphChiStorage {
 
         fn get_interval(
             &self,
             interval_id: &usize
-        ) -> Result<(Vec<AdjacentShard>, EdgeDataShard<'a>)> {
+        ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
             let path = Path::new(&(Graph::constants::ROOT_PATH + "/interval_" + stringify!(interval_id)));
             let ref mut in_stream = GraphChiInputStream::open(path);
             let ref mut adj_shard = vec![];
@@ -275,13 +282,13 @@ pub mod storage_core {
                     s.for_each(
                         move |x|
                             Self::process_line(
-                                x, adj_shard,
+                                &x, adj_shard,
                                 edge_arr
                             )
                     );
                     Ok(
                         (
-                            adj_shard.into_vec(),
+                            adj_shard.to_vec(),
                             EdgeDataShard { 0: edge_arr.iter().map(|x| x).collect() }
                         )
                     )
@@ -290,7 +297,7 @@ pub mod storage_core {
                     Err(
                         IntervalLoadError::new(
                             "Error occurs when loading Interval".to_string().borrow(),
-                            e
+                            std::io::Error::new(e.kind(), e)
                         ).into()
                     )
                 }
@@ -303,12 +310,12 @@ pub mod storage_core {
         ) -> Option<usize> {
             match self.interval_metadata_buf.
                 binary_search_by_key(
-                    interval_id.into_u64().borrow(),
-                    |x| x.interval_id
+                    interval_id,
+                    |x| x.interval_id as usize
                 ) {
                 Ok(pos) => match self.interval_metadata_buf.get(pos) {
                     Some(metadata) =>
-                        Some(metadata.shard_num.borrow() as usize),
+                        Some(metadata.shard_num as usize),
                     None => None
                 }
                 Err(e) => None
@@ -317,22 +324,22 @@ pub mod storage_core {
 
         fn update_interval(
             &self,
-            adj_shard: AdjacentShard,
-            edge_shard: EdgeDataShard<'a>
+            adj_shard: &AdjacentShard,
+            edge_shard: &EdgeDataShard
         ) -> Result<()> {
             // TODO
             unimplemented!()
         }
     }
 
-    impl <'a> GraphChiStorage<'a> {
+    impl GraphChiStorage {
 
         pub fn new(
             root_dir: &String,
             prefix_interval: &String
         ) -> Self {
             GraphChiStorage {
-                edge_buffer: EdgeBuffer { buffer: BinaryHeap::new() },
+                edge_buffer: EdgeBuffer { buffer: BinaryHeap::<Unit>::new() },
                 root_dir: root_dir.clone(),
                 prefix_interval: prefix_interval.clone(),
                 interval_metadata_buf: vec![]
@@ -340,9 +347,9 @@ pub mod storage_core {
         }
 
         pub fn process_line(
-            x: &dyn InputStream,
+            x: &dyn InputStream<Item = Stream>,
             adj_shard: &mut Vec<AdjacentShard>,
-            edge_arr: &mut Vec<Edge<'a, f64>>) {
+            edge_arr: &mut Vec<Edge<f64>>) {
             // TODO
         }
     }
