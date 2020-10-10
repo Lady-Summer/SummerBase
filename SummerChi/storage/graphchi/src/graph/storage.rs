@@ -3,7 +3,7 @@ use crate::graph::core::*;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-pub trait Storage {
+pub trait Storage: Clone {
 
     /// load interval with interval id from disk
     /// PSW can call this directly to load one interval.
@@ -29,6 +29,7 @@ mod io {
     use std::path::Path;
     use crate::graph as Graph;
     use Graph::core::*;
+    use tokio::fs::File;
 
     pub type Stream = Vec<u8>;
 
@@ -55,12 +56,12 @@ mod io {
         fn read_all_lines(&mut self) -> Result<Vec<Stream>>;
 
         /// Open a file stream in path
+        /// Return a tokio type file
         /// # Error
         ///
         fn open<P: AsRef<Path>>(
             path: P
-        ) -> Result<dyn InputStream<Item = Stream>>
-            where Self: Sized;
+        ) -> Result<File>;
 
         /// Return true:  pc in the end of the stream.
         /// Return false: pc is not in the end
@@ -83,45 +84,36 @@ mod io {
     /// It is a general type of Stream Transformer. It is mainly used to transform each line of a input stream in a
     /// specific type by a given decoder
     pub trait StreamTransformer {
-
-        fn decode_all_lines<U, F>(
-            &self,
-            input_stream: &mut dyn InputStream<Item = Stream>,
-            decoder: F
+        fn decode_all<U, F>(
+            input_stream: Vec<&Stream>,
+            decoder: &F
         ) -> Vec<U> where F: Fn(&Stream) -> U, U: Clone {
-            let ref mut result = vec![];
-            while !input_stream.is_end() {
-                match input_stream.readline() {
-                    Ok(stream) => match stream {
-                        Some(line) => result.push(decoder(line.borrow())),
-                        None => break
-                    },
-                    Err(e) => panic!(e)
-                }
-            }
-            result.to_vec()
-        }
-
-        fn decode_lines_range<U, F>(
-            &self,
-            input_stream: &mut dyn InputStream<Item = Stream>,
-            decoder: F) -> &Vec<U>
-            where F: Fn(&Stream) -> U {
-            unimplemented!()
+            input_stream.iter().map(
+                |x| Self::decode_stream(*x, decoder)
+            ).collect()
         }
 
         fn decode_stream<U, F>(
             stream: &Stream,
-            decoder: F
+            decoder: &F
         ) -> U where F: Fn(&Stream) -> U {
             decoder(stream)
         }
 
         fn encode_to_stream<U, F>(
             data: &U,
-            encoder: F
+            encoder: &F
         ) -> Stream where F: Fn(&U) -> Stream {
             encoder(data)
+        }
+
+        fn encode_all<U, F> (
+            stream: Vec<&U>,
+            encoder: &F
+        ) -> Vec<Stream> where F: Fn(&U) -> Stream {
+            stream.iter().map(
+                |x| Self::encode_to_stream(*x, encoder)
+            ).collect()
         }
     }
 
@@ -152,7 +144,7 @@ mod io {
     }
 }
 
-#[derive(PartialOrd, PartialEq)]
+#[derive(PartialEq, PartialOrd ,Ord, Eq, Clone)]
 struct Unit(ShardId, IntervalId, Edge<f64>);
 //
 // impl <'a> PartialEq for Unit<'a> {
@@ -167,6 +159,7 @@ struct Unit(ShardId, IntervalId, Edge<f64>);
 //     }
 // }
 
+#[derive(Clone)]
 struct EdgeBuffer {
     buffer: BinaryHeap<Unit>
 }
@@ -197,7 +190,7 @@ pub mod storage_core {
 
     }
 
-    #[derive(Hash, PartialOrd, PartialEq)]
+    #[derive(Clone, Hash, PartialOrd, PartialEq)]
     struct Metadata {
         line_num: u64,
         interval_id: u64,
@@ -235,8 +228,16 @@ pub mod storage_core {
 
         fn open<P: AsRef<Path>> (
             path: P
-        ) -> Result<dyn InputStream<Item = Stream>> {
-            unimplemented!()
+        ) -> Result<File>{
+            let std_file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(path.as_ref());
+            match std_file {
+                Ok(f) => Ok(File::from_std(f)),
+                Err(e) => Err(tokio::io::Error::new(e.kind(), e))
+            }
         }
 
         fn is_end(&self) -> bool {
@@ -250,6 +251,7 @@ pub mod storage_core {
         fn len(&self) -> u64 {
             unimplemented!()
         }
+
     }
 
     impl Iterator for GraphChiInputStream {
@@ -260,6 +262,16 @@ pub mod storage_core {
         }
     }
 
+    impl GraphChiInputStream {
+        fn new(file: File) -> GraphChiInputStream {
+            GraphChiInputStream {
+                file,
+                pc: 0
+            }
+        }
+    }
+
+    #[derive(Clone)]
     pub struct GraphChiStorage {
         edge_buffer: super::EdgeBuffer,
         root_dir: String,
@@ -273,14 +285,15 @@ pub mod storage_core {
             &self,
             interval_id: &usize
         ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
-            let path = Path::new(&(Graph::constants::ROOT_PATH + "/interval_" + stringify!(interval_id)));
-            let ref mut in_stream = GraphChiInputStream::open(path);
+            let root_path = Graph::constants::ROOT_PATH;
+            let path = Path::new(root_path);
             let ref mut adj_shard = vec![];
             let ref mut edge_arr = vec![];
-            match in_stream {
+            match GraphChiInputStream::open(path) {
                 Ok(s) => {
-                    s.for_each(
-                        move |x|
+                    let ref mut file_stream = GraphChiInputStream::new(s);
+                    file_stream.for_each(
+                        |x|
                             Self::process_line(
                                 &x, adj_shard,
                                 edge_arr
@@ -289,7 +302,7 @@ pub mod storage_core {
                     Ok(
                         (
                             adj_shard.to_vec(),
-                            EdgeDataShard { 0: edge_arr.iter().map(|x| x).collect() }
+                            EdgeDataShard { 0: edge_arr.to_vec() }
                         )
                     )
                 },
@@ -347,7 +360,7 @@ pub mod storage_core {
         }
 
         pub fn process_line(
-            x: &dyn InputStream<Item = Stream>,
+            x: &Stream,
             adj_shard: &mut Vec<AdjacentShard>,
             edge_arr: &mut Vec<Edge<f64>>) {
             // TODO

@@ -1,5 +1,9 @@
 use std::borrow::Borrow;
 use std::iter::FromIterator;
+<<<<<<< HEAD
+=======
+use std::cmp::Ordering;
+>>>>>>> 8bba81b... Fix Compile Error, #Iter1, ##MissSummer
 
 pub type EdgeId = u64;
 pub type VertexId = u64;
@@ -15,14 +19,14 @@ pub struct Vertex {
 }
 
 #[derive(Clone, PartialOrd, PartialEq)]
-pub struct Edge<T> {
+pub struct Edge<T: Sized> {
     id: EdgeId,
     src: VertexId,
     dest: VertexId,
     weight: T
 }
 
-impl <T> Edge<T> {
+impl <T: Sized> Edge<T> {
     pub fn new(id: EdgeId, src: VertexId, dest: VertexId, weight: T) -> Edge<T> {
         Edge {
             id,
@@ -37,7 +41,15 @@ impl <T> Edge<T> {
     }
 }
 
-impl <T: 'static> FromIterator<&'static Edge<T>> for Vec<Edge<T>> {
+impl Ord for Edge<f64> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.weight.partial_cmp(other.weight.borrow()).unwrap()
+    }
+}
+
+impl Eq for Edge<f64> {}
+
+impl <T: Sized + 'static> FromIterator<&'static Edge<T>> for Vec<Edge<T>> {
     fn from_iter<U: IntoIterator<Item=&'static Edge<T>>>(iter: U) -> Self {
         unimplemented!()
     }

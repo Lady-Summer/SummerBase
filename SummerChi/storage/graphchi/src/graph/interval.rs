@@ -4,18 +4,31 @@ use crate::graph as Graph;
 use Graph::core::*;
 use Graph::storage::Storage;
 use std::ops::Deref;
+use std::cmp::Ordering;
 
 type InEdge= Edge<f64>;
 type DestVertex = Vertex;
 type IntervalId = usize;
 
-#[derive(Clone, PartialOrd, PartialEq)]
+#[derive(Clone)]
 pub struct Shard<'a> {
 
     pub id: &'a usize,
 
     /// dest -> inEdges
     pub edges: HashMap<VertexId, Vec<InEdge>>
+}
+
+impl <'a> PartialOrd for Shard<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        unimplemented!()
+    }
+}
+
+impl <'a> PartialEq for Shard<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        unimplemented!()
+    }
 }
 
 #[derive(Clone, PartialOrd, PartialEq)]
@@ -34,29 +47,29 @@ pub struct Interval<'a, S: Storage> {
 
 impl <'a, S: Storage> Interval<'a, S> {
 
-    pub fn new(shards_num: &u64, s: S)
+    pub fn new(shards_num: &u64, storage: S)
                -> Interval<'a, S> {
         Interval {
             shards: Vec::with_capacity(*shards_num as usize),
             vertices: vec![],
             id: 0.borrow(),
             shard_size: *shards_num as usize,
-            s: &s
+            s: storage
         }
     }
 
     pub fn load_interval_from_disk(
         &self,
         interval_id: &'a IntervalId,
-        s: S
+        storage: S
     ) -> Interval<'a, S> {
-        match s.get_interval(interval_id) {
+        match storage.get_interval(interval_id) {
             Ok(interval) => {
                 let mut edge_data_shard = interval.1;
                 let mut shards = vec![];
                 let ref mut vertices: Vec<DestVertex> = vec![];
                 interval.0.iter().for_each(
-                    move |adj_shard|
+                    |adj_shard|
                         shards.push(
                             self.transform_shards(
                                 interval_id,
@@ -73,7 +86,7 @@ impl <'a, S: Storage> Interval<'a, S> {
                     vertices: vertices.to_vec(),
                     id: interval_id,
                     shard_size: 0,
-                    s: &s
+                    s: storage
                 }
             },
             Err(e) => panic!("Error occurs when load interval from disk: {:?}", e)
@@ -83,14 +96,14 @@ impl <'a, S: Storage> Interval<'a, S> {
 
     fn transform_shards(
         &self,
-        interval_id: &IntervalId,
+        interval_id: &'a IntervalId,
         vertices: &mut Vec<Vertex>,
         adj_shard: &AdjacentShard,
         edge_shard: &mut EdgeDataShard
     ) -> Shard<'a> {
         vertices.push(adj_shard.0.clone());
         Shard {
-            id: interval_id.clone().borrow(),
+            id: interval_id,
             edges: self.get_shard_vertices_inedges(adj_shard, edge_shard)
         }
     }
@@ -105,7 +118,7 @@ impl <'a, S: Storage> Interval<'a, S> {
         edges.insert(
             adj_shard.2.id.clone(),
             adj_shard.1.iter().map(
-                move |x| {
+                |x| {
                     /// Insert
                     match edge_shard.find_by_edge_id(x) {
                         Some(edge) => edge.clone(),
