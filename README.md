@@ -19,11 +19,17 @@ The top layer is **a stateless system**, it is responsible for all in-memory cal
 
 The secondary layer is a **disk-based system**. Our goal is to integrate all in one. Although we have some valuable theories and projects in distributed RDBMS, it is still a hard problem for Graph DB because Graph Storage and Graph Computation has little common points: 
 
-* Graph Computation usually iterates on a batch of vertices and edges. **It focuses on how to do global analysis on a static, big graph more efficiently**;
-* Graph Storage usually only query, delete, update and add several vertices or edges. **It focuses on how to CRUD vertex/edge more efficiently**.
+* Graph Computation usually iterates on a batch of vertices and edges. **It focuses on how to do global analysis on a static, big graph more efficiently**. We need a powerful computation engine;
+* Graph Storage usually only query, delete, update and add several vertices and edges. **It focuses on how to CRUD vertex/edge more efficiently**. Concurrency plays a key role.
 * The data formats of Graph Computation and Graph Storage are totally different. Transformation is a huge time-consuming task which will affect performance a lot. 
 
-All means we need a new framework to resolve this problem. Our solution is to **add suitable redundancy for different tasks** (It will be decided by component like job scheduler what a task's type is). Redundancy means they will **have repeated data**. That says, we will **use two different data formats for OLAP and OLTP** tasks. 
+Graph Processing System faces **three challenges** before:
+
+* Most Graph Computation Systems are **in-memory** which means for a large graph, it will consume many resources; Disk-Base system is need now;
+* It is not right just put a logic layer on the top of RDBMS or HDFS because degree distribution in real-world is skewed of power-law. We should consider in a native roadmap because it is more efficient and natural.
+* Native graph will **face significant random I/O**. How to reduce random I/O is the first problem should be tackled down. 
+
+All these challenges drive us to find a new framework to resolve this problem. Our solution is to **store data in hybrid**. That means, we will **use two different data formats for OLAP and OLTP** tasks respectively. 
 
 * For OLAP, more compact data format is needed;
 * For OLTP, we need structural data format;

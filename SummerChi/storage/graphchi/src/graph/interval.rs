@@ -3,24 +3,38 @@ use std::borrow::{Borrow, BorrowMut};
 use crate::graph as Graph;
 use Graph::core::*;
 use Graph::storage::Storage;
+use std::ops::Deref;
+use std::cmp::Ordering;
 
-type InEdge<'a> = Edge<'a, f64>;
+type InEdge= Edge<f64>;
 type DestVertex = Vertex;
 type IntervalId = usize;
 
-#[derive(Clone, PartialOrd, PartialEq)]
-pub struct Shard<'a, S: Storage> {
+#[derive(Clone)]
+pub struct Shard<'a> {
 
     pub id: &'a usize,
 
     /// dest -> inEdges
-    pub edges: HashMap<VertexId, Vec<InEdge<'a>>>
+    pub edges: HashMap<VertexId, Vec<InEdge>>
+}
+
+impl <'a> PartialOrd for Shard<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        unimplemented!()
+    }
+}
+
+impl <'a> PartialEq for Shard<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        unimplemented!()
+    }
 }
 
 #[derive(Clone, PartialOrd, PartialEq)]
 pub struct Interval<'a, S: Storage> {
 
-    pub shards: Vec<Shard<'a, S>>,
+    pub shards: Vec<Shard<'a>>,
 
     pub vertices: Vec<DestVertex>,
 
@@ -33,41 +47,46 @@ pub struct Interval<'a, S: Storage> {
 
 impl <'a, S: Storage> Interval<'a, S> {
 
-    pub fn new(shards_num: &u64, s: S)
+    pub fn new(shards_num: &u64, storage: S)
                -> Interval<'a, S> {
         Interval {
-            shards: Vec::with_capacity(shards_num.to_usize()),
+            shards: Vec::with_capacity(*shards_num as usize),
             vertices: vec![],
             id: 0.borrow(),
-            shard_size: shards_num.to_usize(),
-            s
+            shard_size: *shards_num as usize,
+            s: storage
         }
     }
 
-    pub fn load_interval_from_disk(interval_id: &IntervalId, s: S) -> Interval<'a, S> {
-        match s.get_interval(interval_id) {
+    pub fn load_interval_from_disk(
+        &self,
+        interval_id: &'a IntervalId,
+        storage: S
+    ) -> Interval<'a, S> {
+        match storage.borrow().get_interval(interval_id) {
             Ok(interval) => {
                 let mut edge_data_shard = interval.1;
                 let mut shards = vec![];
                 let ref mut vertices: Vec<DestVertex> = vec![];
                 interval.0.iter().for_each(
-                    move |adj_shard|
+                    |adj_shard|
                         shards.push(
-                            Self::transform_shards(
-                                interval_id, vertices,
+                            self.transform_shards(
+                                interval_id,
+                                vertices,
                                 adj_shard,
                                 edge_data_shard.borrow_mut()
                             )
                         )
                 );
                 /// Sort vertices in order with id
-                vertices.sort_by_key(|x| x.get_id());
+                vertices.sort_by_key(|x| x.id.clone());
                 Interval {
                     shards,
                     vertices: vertices.to_vec(),
                     id: interval_id,
                     shard_size: 0,
-                    s
+                    s: storage
                 }
             },
             Err(e) => panic!("Error occurs when load interval from disk: {:?}", e)
@@ -76,28 +95,30 @@ impl <'a, S: Storage> Interval<'a, S> {
     }
 
     fn transform_shards(
-        interval_id: &IntervalId,
+        &self,
+        interval_id: &'a IntervalId,
         vertices: &mut Vec<Vertex>,
         adj_shard: &AdjacentShard,
-        edge_shard: &mut EdgeDataShard<'a>
-    ) -> Shard<'a,  S> {
+        edge_shard: &mut EdgeDataShard
+    ) -> Shard<'a> {
         vertices.push(adj_shard.0.clone());
         Shard {
             id: interval_id,
-            edges: Self::get_shard_vertices_inedges(adj_shard, edge_shard)
+            edges: self.get_shard_vertices_inedges(adj_shard, edge_shard)
         }
     }
 
     fn get_shard_vertices_inedges(
+        &self,
         adj_shard: &AdjacentShard,
-        edge_shard: &mut EdgeDataShard<'a>
-    ) -> HashMap<u64, Vec<InEdge<'a>>> {
-        let mut edges: HashMap<VertexId, Vec<InEdge<'a>>> = HashMap::new();
+        edge_shard: &mut EdgeDataShard
+    ) -> HashMap<u64, Vec<InEdge>> {
+        let mut edges: HashMap<VertexId, Vec<InEdge>> = HashMap::new();
         edge_shard.sort_by_edge_id();
         edges.insert(
-            adj_shard.2.get_id().clone(),
+            adj_shard.2.id.clone(),
             adj_shard.1.iter().map(
-                move |x| {
+                |x| {
                     /// Insert
                     match edge_shard.find_by_edge_id(x) {
                         Some(edge) => edge.clone(),
