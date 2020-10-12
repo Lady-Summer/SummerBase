@@ -69,34 +69,43 @@ impl <'a, S: Storage> Interval<'a, S> {
             .poll()
             .map(|x| {
                 match x {
-                    Ok(interval) => {
-                        let mut edge_data_shard = interval.1;
-                        let mut shards = vec![];
-                        let ref mut vertices: Vec<DestVertex> = vec![];
-                        interval.0.iter().for_each(
-                            |adj_shard|
-                                shards.push(
-                                    self.transform_shards(
-                                        interval_id,
-                                        vertices,
-                                        adj_shard,
-                                        edge_data_shard.borrow_mut()
-                                    )
-                                )
-                        );
-                        /// Sort vertices in order with id
-                        vertices.sort_by_key(|x| x.id.clone());
-                        Interval {
-                            shards,
-                            vertices: vertices.to_vec(),
-                            id: interval_id,
-                            shard_size: 0,
-                            s: storage
-                        }
-                    },
-                    Err(e) => panic!("Error occurs when load interval from disk: {:?}", e)
+                    Ok(interval) =>
+                        self.transform_into_interval(interval_id, storage, interval),
+                    Err(e) =>
+                        panic!("Error occurs when load interval from disk: {:?}", e)
                 }
         })
+    }
+
+    fn transform_into_interval (
+        &self,
+        interval_id: &usize,
+        storage: S,
+        interval: (Vec<AdjacentShard>, EdgeDataShard)
+    ) -> Interval<S> {
+        let mut edge_data_shard = interval.1;
+        let mut shards = vec![];
+        let ref mut vertices: Vec<DestVertex> = vec![];
+        interval.0.iter().for_each(
+            |adj_shard|
+                shards.push(
+                    self.transform_shards(
+                        interval_id,
+                        vertices,
+                        adj_shard,
+                        edge_data_shard.borrow_mut()
+                    )
+                )
+        );
+        /// Sort vertices in order with id
+        vertices.sort_by_key(|x| x.id.clone());
+        Interval {
+            shards,
+            vertices: vertices.to_vec(),
+            id: interval_id,
+            shard_size: 0,
+            s: storage
+        }
     }
 
     fn transform_shards(

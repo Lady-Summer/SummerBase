@@ -13,11 +13,15 @@ pub trait Storage: Clone {
     ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)>;
 
     ///
-    fn get_shard_num(&self, interval_id: &usize) -> Option<usize>;
+    fn get_shard_num (
+        &self,
+        interval_id: &usize
+    ) -> Option<usize>;
 
     /// Flush all updated interval data into disk
-    fn update_interval(
+    async fn update_interval(
         &self,
+        interval_id: &usize,
         adj_shard: &AdjacentShard,
         edge_shard: &EdgeDataShard
     ) -> Result<()>;
@@ -179,7 +183,7 @@ pub mod storage_core {
     use tokio::prelude::{AsyncBufRead, AsyncRead};
     use std::task::Context;
     use tokio::macros::support::{Pin, Poll};
-    use std::ops::{Try, AddAssign};
+    use std::ops::AddAssign;
 
     mod codec {
         use std::io::Result;
@@ -312,37 +316,22 @@ pub mod storage_core {
         edge_buffer: super::EdgeBuffer,
         root_dir: String,
         prefix_interval: String,
-        interval_metadata_buf: Vec<Metadata>
+        interval_metadata_buf: Vec<Metadata>,
+        gid: u32
     }
 
     impl super::Storage for GraphChiStorage {
 
-        async fn get_interval(
+        async fn get_interval (
             &self,
             interval_id: &usize
         ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
-            let root_path = Graph::constants::ROOT_PATH;
-            let path = Path::new(root_path);
-            let ref mut adj_shard = vec![];
-            let ref mut edge_arr = vec![];
+            let path = Path::new (
+                root_path_for_interval(self.gid.borrow(), interval_id).as_str()
+            );
             match GraphChiInputStream::open(path) {
-                Ok(s) => {
-                    let ref mut file_stream = GraphChiInputStream::new(s);
-                    file_stream.for_each(
-                        |x|
-                            Self::process_line(
-                                &x,
-                                adj_shard,
-                                edge_arr
-                            )
-                    );
-                    Ok(
-                        (
-                            adj_shard.to_vec(),
-                            EdgeDataShard { 0: edge_arr.to_vec() }
-                        )
-                    )
-                },
+                Ok(s) =>
+                    self.extract_adj_and_edge_shard(s),
                 Err(e) => {
                     Err(
                         IntervalLoadError::new(
@@ -354,7 +343,7 @@ pub mod storage_core {
             }
         }
 
-        fn get_shard_num(
+        fn get_shard_num (
             &self,
             interval_id: &usize
         ) -> Option<usize> {
@@ -372,8 +361,9 @@ pub mod storage_core {
             }
         }
 
-        fn update_interval(
+        async fn update_interval (
             &self,
+            interval_id: &usize,
             adj_shard: &AdjacentShard,
             edge_shard: &EdgeDataShard
         ) -> Result<()> {
@@ -382,9 +372,11 @@ pub mod storage_core {
         }
     }
 
+
     impl GraphChiStorage {
 
         pub fn new(
+            gid: &u32,
             root_dir: &String,
             prefix_interval: &String
         ) -> Self {
@@ -392,16 +384,41 @@ pub mod storage_core {
                 edge_buffer: EdgeBuffer { buffer: BinaryHeap::<Unit>::new() },
                 root_dir: root_dir.clone(),
                 prefix_interval: prefix_interval.clone(),
-                interval_metadata_buf: vec![]
+                interval_metadata_buf: vec![],
+                gid: gid.clone()
             }
         }
 
-        pub fn process_line(
+        fn process_line(
             x: &Stream,
             adj_shard: &mut Vec<AdjacentShard>,
             edge_arr: &mut Vec<Edge<f64>>
         ) {
             // TODO byte parser
         }
+
+        fn extract_adj_and_edge_shard (
+            &self,
+            s: File
+        ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
+            let ref mut adj_shard = vec![];
+            let ref mut edge_arr = vec![];
+            let ref mut file_stream = GraphChiInputStream::new(s);
+            file_stream.for_each(
+                |x|
+                    Self::process_line(
+                        &x,
+                        adj_shard,
+                        edge_arr
+                    )
+            );
+            Ok(
+                (
+                    adj_shard.to_vec(),
+                    EdgeDataShard { 0: edge_arr.to_vec() }
+                )
+            )
+        }
     }
 }
+
