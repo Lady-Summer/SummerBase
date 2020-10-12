@@ -7,7 +7,7 @@ pub trait Storage: Clone {
 
     /// load interval with interval id from disk
     /// PSW can call this directly to load one interval.
-    fn get_interval(
+    async fn get_interval(
         &self,
         interval_id: &usize
     ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)>;
@@ -30,11 +30,12 @@ mod io {
     use crate::graph as Graph;
     use Graph::core::*;
     use tokio::fs::File;
+    use tokio::prelude::{AsyncBufRead, AsyncWrite};
 
     pub type Stream = Vec<u8>;
 
     /// A common type for file output stream.
-    pub trait InputStream: Read + Iterator {
+    pub trait InputStream: AsyncBufRead + Iterator {
 
         /// Read a line of a file input stream and pc which indicates the offset of the line end.
         /// While read success, return an Option with Stream type data. If catch EOF, return None type.
@@ -72,12 +73,6 @@ mod io {
         // The number of the line
         fn len(&self) -> u64;
 
-        // fn next(&mut self) -> Option<Self::Item> {
-        //     match self.readline() {
-        //         Ok(line) => line,
-        //         Err(e) => None
-        //     }
-        // }
     }
 
 
@@ -117,7 +112,7 @@ mod io {
         }
     }
 
-    pub trait OutputStream: Write {
+    pub trait OutputStream: AsyncWrite {
 
         /// Write a line into file directly
         /// # Error
@@ -140,7 +135,7 @@ mod io {
         /// only add new data.
         /// # Error
         /// If file fails to be opened/created, return
-        fn open<P: AsRef<Path>>(&mut self, path: P) -> Result<()>;
+        fn open<P: AsRef<Path>>(&mut self, path: P) -> Result<File>;
     }
 }
 
@@ -181,6 +176,10 @@ pub mod storage_core {
     use std::sync::Arc;
     use std::sync::atomic::AtomicPtr;
     use tokio::io::util::async_read_ext::AsyncReadExt;
+    use tokio::prelude::{AsyncBufRead, AsyncRead};
+    use std::task::Context;
+    use tokio::macros::support::{Pin, Poll};
+    use std::ops::{Try, AddAssign};
 
     mod codec {
         use std::io::Result;
@@ -207,8 +206,25 @@ pub mod storage_core {
         pc: Arc<u64>
     }
 
-    impl Read for GraphChiInputStream {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    impl AsyncBufRead for GraphChiInputStream {
+        fn poll_fill_buf(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>
+        ) -> Poll<Result<&[u8]>> {
+            unimplemented!()
+        }
+
+        fn consume(self: Pin<&mut Self>, amt: usize) {
+            unimplemented!()
+        }
+    }
+
+    impl AsyncRead for GraphChiInputStream {
+        fn poll_read (
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8]
+        ) -> Poll<Result<usize>> {
             unimplemented!()
         }
     }
@@ -218,16 +234,20 @@ pub mod storage_core {
             self.file.seek(SeekFrom::Start(self.pc.into_u64())).await?;
             let mut flag = vec![0u8; 4];
             self.file.read_exact(&mut flag).await?;
-            self.pc += 4;
+            self.pc.add_assign(4);
             let length = into_usize(flag);
-            let mut raw = Stream::with_capacity(length.clone());
-            match self.file.read_exact(&mut raw).await {
-                Ok(_) => {
-                    self.pc += length.clone();
-                    if length > 0 { Ok(Some(raw)) } else { Ok(None) }
-                },
-                Err(e) =>
-                    Err(std::io::Error::new(e.kind(), e))
+            match self.poll_fill_buf().map (
+                move |x| match x {
+                    Ok(buf) => {
+                        self.pc.add_assign(length as u64);
+                        Ok(Some(Stream::from(buf)))
+                    },
+                    Err(e) =>
+                        Err(std::io::Error::new(e.kind(), e))
+                }
+            ) {
+                Poll::Ready(result) => result,
+                Poll::Pending => Ok(None)
             }
         }
 
@@ -246,11 +266,7 @@ pub mod storage_core {
         fn open<P: AsRef<Path>> (
             path: P
         ) -> Result<File>{
-            let std_file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(false)
-                .open(path.as_ref());
+            let std_file = std::fs::File::open(path.as_ref());
             match std_file {
                 Ok(f) => Ok(File::from_std(f)),
                 Err(e) => Err(tokio::io::Error::new(e.kind(), e))
@@ -275,7 +291,10 @@ pub mod storage_core {
         type Item = Stream;
 
         fn next(&mut self) -> Option<Self::Item> {
-            unimplemented!()
+            match self.readline() {
+                Ok(line) => line,
+                Err(e) => None
+            }
         }
     }
 
@@ -298,7 +317,7 @@ pub mod storage_core {
 
     impl super::Storage for GraphChiStorage {
 
-        fn get_interval(
+        async fn get_interval(
             &self,
             interval_id: &usize
         ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
@@ -312,7 +331,8 @@ pub mod storage_core {
                     file_stream.for_each(
                         |x|
                             Self::process_line(
-                                &x, adj_shard,
+                                &x,
+                                adj_shard,
                                 edge_arr
                             )
                     );

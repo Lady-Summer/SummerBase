@@ -5,6 +5,7 @@ use Graph::core::*;
 use Graph::storage::Storage;
 use std::ops::Deref;
 use std::cmp::Ordering;
+use std::task::Poll;
 
 type InEdge= Edge<f64>;
 type DestVertex = Vertex;
@@ -62,36 +63,40 @@ impl <'a, S: Storage> Interval<'a, S> {
         &self,
         interval_id: &'a IntervalId,
         storage: S
-    ) -> Interval<'a, S> {
-        match storage.borrow().get_interval(interval_id) {
-            Ok(interval) => {
-                let mut edge_data_shard = interval.1;
-                let mut shards = vec![];
-                let ref mut vertices: Vec<DestVertex> = vec![];
-                interval.0.iter().for_each(
-                    |adj_shard|
-                        shards.push(
-                            self.transform_shards(
-                                interval_id,
-                                vertices,
-                                adj_shard,
-                                edge_data_shard.borrow_mut()
-                            )
-                        )
-                );
-                /// Sort vertices in order with id
-                vertices.sort_by_key(|x| x.id.clone());
-                Interval {
-                    shards,
-                    vertices: vertices.to_vec(),
-                    id: interval_id,
-                    shard_size: 0,
-                    s: storage
+    ) -> Poll<Interval<'a, S>> {
+        storage.borrow()
+            .get_interval(interval_id)
+            .poll()
+            .map(|x| {
+                match x {
+                    Ok(interval) => {
+                        let mut edge_data_shard = interval.1;
+                        let mut shards = vec![];
+                        let ref mut vertices: Vec<DestVertex> = vec![];
+                        interval.0.iter().for_each(
+                            |adj_shard|
+                                shards.push(
+                                    self.transform_shards(
+                                        interval_id,
+                                        vertices,
+                                        adj_shard,
+                                        edge_data_shard.borrow_mut()
+                                    )
+                                )
+                        );
+                        /// Sort vertices in order with id
+                        vertices.sort_by_key(|x| x.id.clone());
+                        Interval {
+                            shards,
+                            vertices: vertices.to_vec(),
+                            id: interval_id,
+                            shard_size: 0,
+                            s: storage
+                        }
+                    },
+                    Err(e) => panic!("Error occurs when load interval from disk: {:?}", e)
                 }
-            },
-            Err(e) => panic!("Error occurs when load interval from disk: {:?}", e)
-        }
-
+        })
     }
 
     fn transform_shards(
