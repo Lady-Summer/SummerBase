@@ -7,5 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-engine_cache = {path = "components/engine_cache"}
-io_controller = {path = "components/io_controller"}
+engine_cache = {path = "pregel/engine_cache"}
+io_controller = {path = "io_controller"}

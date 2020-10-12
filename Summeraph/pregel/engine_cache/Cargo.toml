@@ -1,7 +1,7 @@
 [package]
 name = "engine_cache"
 version = "0.1.0"
-authors = ["eoiyxns <yi.a.song@ericsson.com>"]
+authors = ["MissSummer <madamsummer@163.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

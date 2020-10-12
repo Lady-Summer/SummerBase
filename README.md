@@ -84,8 +84,10 @@ I think It should be handled by a system like Job Scheduler. Importantly, user-i
 
 #### Summeraph
 
+- [ ] Components hash algorithm
 - [ ] Vertices Actor Model
-- [ ] Vertex Pool and Edge Pool
+- [ ] Vertex Pool and Edge Pool model
+- [ ] Message Interfaces
 - [ ] Communication Dispatcher
 - [ ] Data Structure Transformation with SummerChi
 - [ ] GAS RPC API
@@ -99,8 +101,4 @@ I think It should be handled by a system like Job Scheduler. Importantly, user-i
 - [ ] Procedural Macro support.
 
 ## Quick Start
-
-
-
-
 
