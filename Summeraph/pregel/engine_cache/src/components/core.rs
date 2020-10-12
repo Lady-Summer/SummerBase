@@ -14,11 +14,8 @@ pub mod vertex {
     #[derive(Clone)]
     pub struct Vertex {
         metadata: Metadata,
-        properties: HashMap<String, String>,
-        adj_list: HashSet<(Delta, EdgeId)>,
+        out_edges: HashSet<EdgeId>,
         state: VertexState,
-        compressed_adj: Vec<u8>,
-        labels: Vec<String>,
         in_edges: HashSet<EdgeId>
     }
 
@@ -52,11 +49,8 @@ pub mod vertex {
                     schema: Schema::new(),
                     partition_id: 0
                 },
-                properties: Default::default(),
-                adj_list: Default::default(),
+                out_edges: HashSet::new(),
                 state: VertexState::INACTIVE,
-                compressed_adj: vec![],
-                labels: vec![],
                 in_edges: HashSet::new()
             }
         }
@@ -80,18 +74,6 @@ pub mod vertex {
         pub fn is_terminate(&self) -> bool {
             self.state == VertexState::INACTIVE
         }
-
-        pub fn get_property(&self, key: &String) -> Option<&String> {
-            match self.properties.get(key) {
-                Some(value) => Some(value),
-                None => {}
-            }
-        }
-
-        fn get_labels(&self) -> &[String] {
-            self.labels.as_slice()
-        }
-
     }
 
     impl Actor for Vertex {
