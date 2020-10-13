@@ -169,15 +169,15 @@ pub mod storage_core {
     use std::path::Path;
     use std::borrow::{Borrow, BorrowMut};
     use std::collections::BinaryHeap;
-    use crate::graph as Graph;
+    use super::super as Graph;
     use Graph::core::*;
     use Graph::storage::EdgeBuffer;
     use super::io::*;
     use tokio::fs::File;
     use crate::error::IntervalLoadError;
-    use crate::graph::storage::Unit;
+    use Graph::storage::Unit;
     use std::error::Error;
-    use crate::utils::*;
+    use super::super::super::utils::*;
     use std::sync::Arc;
     use std::sync::atomic::AtomicPtr;
     use tokio::io::util::async_read_ext::AsyncReadExt;
