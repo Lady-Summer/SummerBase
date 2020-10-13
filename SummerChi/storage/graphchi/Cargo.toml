@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 tokio = {version = "0.2", features = ["full"]}
 zstd = "0.5"
+mio = "0.7"

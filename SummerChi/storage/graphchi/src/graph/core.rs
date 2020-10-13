@@ -84,26 +84,3 @@ impl EdgeDataShard {
     }
 }
 
-mod engine_core {
-
-    pub struct GraphEngine {
-        intervals: Vec<usize>,
-    }
-
-    impl GraphEngine {
-        pub fn new(partition_num: usize) -> Self {
-            GraphEngine {
-                intervals: Vec::with_capacity(partition_num)
-            }
-        }
-        //
-        // pub fn start(graph_id: &u32) {
-        //
-        // }
-        //
-        // pub fn parallel_slide_window<F, T>(&self, f: F) -> Result<T>
-        //     where F: Fn(Vertex) -> T {
-        //
-        // }
-    }
-}
