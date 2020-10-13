@@ -242,7 +242,11 @@ pub mod storage_core {
             self.file.read_exact(&mut flag).await?;
             self.pc.add_assign(4);
             let length = into_usize(flag);
-            poll_fn(|ctx| Pin::new(self).poll_fill_buf( ctx))
+            /// Multithread scenario analysis:
+            /// Two threads A and B concurrently call readline() of a single input stream refrence.
+            ///
+            poll_fn(|ctx|
+                Pin::new(self).poll_fill_buf( ctx))
                 .await.map (
                 move |x|  {
                     self.pc.add_assign(length as u64);
