@@ -54,10 +54,10 @@ impl <T: Sized + 'static> FromIterator<&'static Edge<T>> for Vec<Edge<T>> {
 
 /// src -> edge -> dest
 /// multi-relation
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone)]
 pub struct AdjacentShard(pub Vertex, pub Vec<EdgeId>, pub Vertex);
 
-#[derive(PartialEq)]
+#[derive(Clone)]
 pub struct EdgeDataShard(pub Vec<Edge<f64>>);
 
 impl EdgeDataShard {
