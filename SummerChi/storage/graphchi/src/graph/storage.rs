@@ -2,12 +2,13 @@ use std::io::Result;
 use crate::graph::core::*;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use tokio::macros::support::Future;
 
-pub trait Storage: Clone {
+pub trait Storage {
 
     /// load interval with interval id from disk
     /// PSW can call this directly to load one interval.
-    async fn get_interval(
+    fn get_interval(
         &self,
         interval_id: &usize
     ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)>;
@@ -19,7 +20,7 @@ pub trait Storage: Clone {
     ) -> Option<usize>;
 
     /// Flush all updated interval data into disk
-    async fn update_interval(
+    fn update_interval(
         &self,
         interval_id: &usize,
         adj_shard: &AdjacentShard,
@@ -181,9 +182,10 @@ pub mod storage_core {
     use std::sync::atomic::AtomicPtr;
     use tokio::io::util::async_read_ext::AsyncReadExt;
     use tokio::prelude::{AsyncBufRead, AsyncRead};
-    use std::task::Context;
+    use std::task::{Context, Waker};
     use tokio::macros::support::{Pin, Poll};
     use std::ops::AddAssign;
+    use tokio::future::poll_fn;
 
     mod codec {
         use std::io::Result;
@@ -207,7 +209,7 @@ pub mod storage_core {
 
     struct GraphChiInputStream {
         file: Arc<File>,
-        pc: Arc<u64>
+        pc: Arc<u64>,
     }
 
     impl AsyncBufRead for GraphChiInputStream {
@@ -240,19 +242,13 @@ pub mod storage_core {
             self.file.read_exact(&mut flag).await?;
             self.pc.add_assign(4);
             let length = into_usize(flag);
-            match self.poll_fill_buf().map (
-                move |x| match x {
-                    Ok(buf) => {
-                        self.pc.add_assign(length as u64);
-                        Ok(Some(Stream::from(buf)))
-                    },
-                    Err(e) =>
-                        Err(std::io::Error::new(e.kind(), e))
+            poll_fn(|ctx| Pin::new(self).poll_fill_buf( ctx))
+                .await.map (
+                move |x|  {
+                    self.pc.add_assign(length as u64);
+                    if x.len() > 0 {Some(Stream::from(buf)) } else {None}
                 }
-            ) {
-                Poll::Ready(result) => result,
-                Poll::Pending => Ok(None)
-            }
+            )
         }
 
         fn readline_range(
@@ -306,7 +302,7 @@ pub mod storage_core {
         fn new(file: File) -> GraphChiInputStream {
             GraphChiInputStream {
                 file: Arc::new(file),
-                pc: Arc::new(1)
+                pc: Arc::new(1),
             }
         }
     }
@@ -320,9 +316,9 @@ pub mod storage_core {
         gid: u32
     }
 
-    impl super::Storage for GraphChiStorage {
+    impl GraphChiStorage {
 
-        async fn get_interval (
+        pub async fn get_interval (
             &self,
             interval_id: &usize
         ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
@@ -343,7 +339,7 @@ pub mod storage_core {
             }
         }
 
-        fn get_shard_num (
+        pub fn get_shard_num (
             &self,
             interval_id: &usize
         ) -> Option<usize> {
@@ -361,7 +357,7 @@ pub mod storage_core {
             }
         }
 
-        async fn update_interval (
+        pub async fn update_interval (
             &self,
             interval_id: &usize,
             adj_shard: &AdjacentShard,
@@ -370,10 +366,6 @@ pub mod storage_core {
             // TODO
             unimplemented!()
         }
-    }
-
-
-    impl GraphChiStorage {
 
         pub fn new(
             gid: &u32,
@@ -399,11 +391,11 @@ pub mod storage_core {
 
         fn extract_adj_and_edge_shard (
             &self,
-            s: File
+            file: File
         ) -> Result<(Vec<AdjacentShard>, EdgeDataShard)> {
             let ref mut adj_shard = vec![];
             let ref mut edge_arr = vec![];
-            let ref mut file_stream = GraphChiInputStream::new(s);
+            let ref mut file_stream = GraphChiInputStream::new(file);
             file_stream.for_each(
                 |x|
                     Self::process_line(

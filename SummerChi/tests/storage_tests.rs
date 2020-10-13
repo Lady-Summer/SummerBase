@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod core_tests {
+mod edge_shard_test {
     use graphchi::graph::core::{EdgeDataShard, Edge};
     use mockall::*;
     use std::borrow::{BorrowMut, Borrow};
@@ -45,5 +45,23 @@ mod core_tests {
         let mut mock_edge_sorted = MOCK_EDGES.to_vec();
         mock_edge_sorted.sort_by_key(|x| x.id.borrow());
         assert_eq!(mock_edge_shard, EdgeDataShard(mock_edge_sorted))
+    }
+}
+
+#[cfg(test)]
+mod interval_test {
+    use graphchi::graph::interval::Interval;
+    use graphchi::graph::storage::Storage;
+
+    #[automock]
+    impl <'a, S: Storage> Interval<'a, S> {
+
+        fn test_load_from_disk(&self) {
+        }
+    }
+
+    #[test]
+    fn test_load_interval_from_disk() {
+
     }
 }

@@ -78,6 +78,10 @@ impl EdgeDataShard {
     pub fn sort_by_edge_id(&mut self) {
         self.0.sort_by_key(|x| x.id.clone())
     }
+
+    pub fn sort_by_src_id(&mut self) {
+        self.0.sort_by_key(|x| x.src.clone())
+    }
 }
 
 mod engine_core {
