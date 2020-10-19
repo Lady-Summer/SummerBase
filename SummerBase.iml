@@ -10,7 +10,11 @@
       <sourceFolder url="file://$MODULE_DIR$/SummerChi/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/Summeraph/pregel/engine_cache/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Summeraph/pregel/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/SummerChi/storage/rockschi/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/SummerChi/storage/network/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/SummerChi/storage/graphchi/target" />
+      <excludeFolder url="file://$MODULE_DIR$/SummerChi/storage/network/target" />
+      <excludeFolder url="file://$MODULE_DIR$/SummerChi/storage/rockschi/target" />
       <excludeFolder url="file://$MODULE_DIR$/SummerChi/target" />
       <excludeFolder url="file://$MODULE_DIR$/Summeraph/components/engine_cache/target" />
       <excludeFolder url="file://$MODULE_DIR$/Summeraph/pregel/engine_cache/target" />

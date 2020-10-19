@@ -186,6 +186,7 @@ pub mod storage_core {
     use tokio::macros::support::{Pin, Poll};
     use std::ops::AddAssign;
     use tokio::future::poll_fn;
+    use tokio::io::AsyncSeek;
 
     mod codec {
         use std::io::Result;
@@ -213,6 +214,8 @@ pub mod storage_core {
     }
 
     impl AsyncBufRead for GraphChiInputStream {
+
+        /// Read from where pc points
         fn poll_fill_buf(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>
@@ -235,6 +238,24 @@ pub mod storage_core {
         }
     }
 
+    impl AsyncSeek for GraphChiInputStream {
+
+        fn start_seek(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            position: SeekFrom
+        ) -> Poll<Result<()>> {
+            unimplemented!()
+        }
+
+        fn poll_complete(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>
+        ) -> Poll<Result<u64>> {
+            unimplemented!()
+        }
+    }
+
     impl InputStream for GraphChiInputStream {
         fn readline(&mut self) -> Result<Option<Stream>> {
             self.file.seek(SeekFrom::Start(self.pc.into_u64())).await?;
@@ -243,19 +264,18 @@ pub mod storage_core {
             self.pc.add_assign(4);
             let length = into_usize(flag);
             /// Multithread scenario analysis:
-            /// Two threads A and B concurrently call readline() of a single input stream refrence.
+            /// Two threads A and B concurrently call readline() of a single input stream reference.
             ///
-            poll_fn(|ctx|
-                Pin::new(self).poll_fill_buf( ctx))
-                .await.map (
-                move |x|  {
-                    self.pc.add_assign(length as u64);
-                    if x.len() > 0 {Some(Stream::from(buf)) } else {None}
+            poll_fn(move |ctx|
+                self.poll_in_buf( ctx, length)
+            ).await.map (|x|  {
+                    self.pc.add_assign(x.len() as u64);
+                    if x.len() > 0 { Some(Stream::from(buf)) } else { None }
                 }
             )
         }
 
-        fn readline_range(
+        fn readline_range (
             &mut self,
             start: u64,
             end: u64
@@ -303,11 +323,20 @@ pub mod storage_core {
     }
 
     impl GraphChiInputStream {
-        fn new(file: File) -> GraphChiInputStream {
+        pub fn new(file: File) -> GraphChiInputStream {
             GraphChiInputStream {
                 file: Arc::new(file),
                 pc: Arc::new(1),
             }
+        }
+
+        fn poll_in_buf(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            amt: usize
+        ) -> Poll<Result<&[u8]>> {
+            self.consume(amt);
+            self.poll_fill_buf(cx)
         }
     }
 
