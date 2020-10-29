@@ -35,8 +35,7 @@ pub mod prelude {
         fn set_label(&self, label: String) -> Result<()>;
     }
 
-    pub trait Type {
+    pub trait Type: From<Vec<u8>> {
         fn type_id() -> TypeId;
     }
-
 }
